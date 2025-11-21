@@ -1,36 +1,14 @@
-#version: '3'
-#services:
-#  phase1-dev:
-#    build: .
-#    container_name: phase1-dev
-#    ports:
-#      - "8501:8501"
-#    env_file: .env.dev
-#    volumes:
-#      - .:/app
-#    restart: always
-    
-
-#  phase1-prod:
-#    build: .
-#    container_name: phase1-prod
-#    ports:
-#      - "8502:8501"
-#    env_file: .env.prod
-#    restart: always
-    
-
 version: '3.9'
 
 services:
-  phase1:
-    container_name: phase1
+  autoreport:
+    container_name: autoreport
     build:
       context: .
       dockerfile: Dockerfile
-    image: phase1:latest
+    image: autoreport:latest
     ports:
-      - "8502:8501"
+      - "8531:8501"
     volumes:
       - .:/app
       - ./output:/app/output

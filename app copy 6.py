@@ -1,6 +1,6 @@
-# app.py - COMPLETE VERSION
-# Dependencies: streamlit, pandas, plotly, openpyxl, wordcloud, matplotlib, openai
-# Run: streamlit run app.py
+# app_final.py
+# Dependencies: streamlit, pandas, plotly, openpyxl
+# Run: streamlit run app_final.py
 
 import pandas as pd
 import streamlit as st
@@ -14,8 +14,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime
 import logging
-import matplotlib.pyplot as plt
-from collections import Counter
 
 # ============== LOGGING SETUP ==============
 LOG_DIR = "logs"
@@ -41,8 +39,7 @@ if OPENAI_MODEL.strip().startswith("os.getenv"):
     st.error("OPENAI_MODEL di .env berisi ekspresi, bukan nama model. Contoh yang benar: OPENAI_MODEL=gpt-4o-mini")
     logger.error("Invalid OPENAI_MODEL configuration")
 
-BANNED_CHARS = ["—", "–", "≈"]
-
+BANNED_CHARS = [";", ":", "—", "–", "≈"]
 
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, str(default))
@@ -61,13 +58,11 @@ def _word_trim(s: str, max_words=200) -> str:
     return " ".join(w[:max_words])
 
 def _sanitize_output(s: str) -> str:
-    if not s:
-        return s
+    if not s: return s
     for ch in BANNED_CHARS:
         s = s.replace(ch, " ")
-    # Jangan hapus " - " lagi supaya bullet / penghubung aman
+    s = s.replace(" - ", " ")
     s = s.replace("Others", "selebihnya").replace("others", "selebihnya")
-    # Rapikan spasi berlebih
     return " ".join(s.split())
 
 def _finalize_paragraph(s, max_words=200):
@@ -411,14 +406,13 @@ def normalize_sentiment(v):
     except: return "Neutral"
 
 def sentiment_bar(df_src, title):
-    """Render sentiment bar chart and return counts for table"""
     if df_src.empty:
         st.info(f"Tidak ada data untuk {title}.")
-        return None
+        return
     sent_col = pick_col(df_src, ["Sentiment","New Sentiment","new_sentiment","Sentiment Fix","sentiment level","new sentiment level","new_sentiment_level"])
     if not sent_col:
         st.info(f"Kolom Sentiment tidak ditemukan untuk {title}.")
-        return None
+        return
     work = df_src.copy()
     work["__sent"] = work[sent_col].map(normalize_sentiment)
     order  = ["Positive", "Neutral", "Negative"]
@@ -428,7 +422,7 @@ def sentiment_bar(df_src, title):
     total  = int(counts.sum())
     if total == 0:
         st.info(f"Tidak ada data sentiment pada {title}.")
-        return None
+        return
     perc = (counts / total * 100).round(2)
     def fmt_pct(x): return f"{str(f'{x:.2f}').replace('.',',')}%"
     fig_s = go.Figure()
@@ -452,9 +446,6 @@ def sentiment_bar(df_src, title):
     fig_s.update_xaxes(range=[0, 100], ticksuffix="%", showgrid=False, title=None)
     fig_s.update_yaxes(visible=False)
     st.plotly_chart(fig_s, use_container_width=True)
-    
-    # Return counts for table display
-    return counts
 
 # ============== TOPIC CHART HELPERS ==============
 
@@ -512,8 +503,6 @@ def _topic_bar_plot(df_src, topic_col, title, color_hex, metric_kind, value_col=
     fig.update_yaxes(autorange="reversed", tickfont=dict(size=12), showgrid=False)
     st.plotly_chart(fig, use_container_width=True)
 
-
-
 # ============== MAIN APP ==============
 
 logger.info("=" * 80)
@@ -544,16 +533,14 @@ if "dataset_sig" not in st.session_state or st.session_state["dataset_sig"] != d
               "narr_sent_social", "narr_sent_main",
               "narr_channel_social", "narr_channel_main",
               "narr_topic_soc_pos", "narr_topic_soc_neu", "narr_topic_soc_neg",
-              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg",
-              "narr_insights", "narr_recommendations"]:
+              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg"]:
         st.session_state[k] = ""
 else:
     for k in ["narr_sov", "narr_trend_social", "narr_trend_main",
               "narr_sent_social", "narr_sent_main",
               "narr_channel_social", "narr_channel_main",
               "narr_topic_soc_pos", "narr_topic_soc_neu", "narr_topic_soc_neg",
-              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg",
-              "narr_insights", "narr_recommendations"]:
+              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg"]:
         if k not in st.session_state:
             st.session_state[k] = ""
 
@@ -563,10 +550,6 @@ date_col     = find_date_column(df) or df.columns[0]
 channel_col  = pick_col(df, ["Channel","Channels","Platform","Media","Source","Tipe","Type"]) or df.columns[0]
 title_col    = pick_col(df, ["Title", "Judul", "Post Title", "title"])
 content_col  = pick_col(df, ["Content", "Konten", "Caption", "Text", "Isi", "content", "caption", "text"])
-topic_col    = pick_col(df, ["Topic","topic","Topik"])
-sent_col     = pick_col(df, ["Sentiment","New Sentiment","new_sentiment","Sentiment Fix",
-                              "sentiment level","new sentiment level","new_sentiment_level"])
-media_col    = pick_col(df, ["Media Name", "media name", "Media", "Source", "Publisher", "Outlet", "media", "source"])
 
 # Campaign filters
 campaign_values_all = sorted(df[campaign_col].astype(str).dropna().unique().tolist())
@@ -598,16 +581,6 @@ selected_mainstream_channels = st.sidebar.multiselect(
     key="mainstream_channels_sel"
 )
 
-# Language selector
-st.sidebar.markdown("---")
-st.sidebar.subheader("🌐 Narrative Settings")
-narrative_lang = st.sidebar.selectbox(
-    "Language",
-    options=["ID", "EN"],
-    index=0,
-    help="Select language for AI-generated narratives"
-)
-
 # Reset button
 def _reset_all():
     st.session_state["campaign_filter_chart1"]  = campaign_values_all
@@ -633,16 +606,13 @@ st.sidebar.button("🔄 Reset Filters", use_container_width=True, on_click=_rese
 # ============== AI NARRATIVE GENERATION (SIDEBAR) ==============
 st.sidebar.markdown("---")
 st.sidebar.subheader("🤖 AI Narratives")
-st.sidebar.caption(f"⚠️ Will generate 15 narratives in {narrative_lang} (~90-120 seconds)")
+st.sidebar.caption("⚠️ Will generate 13 narratives (~60 seconds)")
 
 if st.sidebar.button("✨ Generate All AI Narratives", use_container_width=True, type="primary"):
     client = _get_openai_client()
     if not client:
         st.sidebar.error("OpenAI client initialization failed")
     else:
-        # Language instruction
-        lang_instruction = "Tulis dalam Bahasa Indonesia yang natural dan mudah dipahami." if narrative_lang == "ID" else "Write in clear, professional English."
-        
         # Prepare filtered data
         df_work = df[df[campaign_col].astype(str).isin(selected_campaigns_chart1)].copy()
         if df_work.empty:
@@ -676,8 +646,6 @@ if st.sidebar.button("✨ Generate All AI Narratives", use_container_width=True,
             ("narr_topic_main_pos", "Topic Mainstream Positive", 120),
             ("narr_topic_main_neu", "Topic Mainstream Neutral", 120),
             ("narr_topic_main_neg", "Topic Mainstream Negative", 120),
-            ("narr_insights", "Insights Summary", 500),
-            ("narr_recommendations", "Recommendations", 500),
         ]
         
         total = len(narratives_to_generate)
@@ -745,9 +713,7 @@ if st.sidebar.button("✨ Generate All AI Narratives", use_container_width=True,
                     })
                 
                 prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus merangkum isi konten, bukan nama topik. Hindari titik dua, titik koma, dash, dan simbol aneh.
 Jangan membuat bullet. Jangan gunakan kata other. Tutup paragraf dengan kalimat yang selesai.
 
@@ -763,9 +729,7 @@ Data:
             
             elif key == "narr_trend_social":
                 prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada tren percakapan social media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -778,9 +742,7 @@ Data: Gunakan data social media yang sudah difilter berdasarkan campaign dan cha
             
             elif key == "narr_trend_main":
                 prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada tren pemberitaan mainstream media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -798,9 +760,7 @@ Data: Gunakan data mainstream yang sudah difilter berdasarkan campaign dan chann
                     work["__sent"] = work[sent_col].map(normalize_sentiment)
                     counts = work["__sent"].value_counts()
                     prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada distribusi sentiment social media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -821,9 +781,7 @@ Data sentiment:
                     work["__sent"] = work[sent_col].map(normalize_sentiment)
                     counts = work["__sent"].value_counts()
                     prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada distribusi sentiment mainstream media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -848,9 +806,7 @@ Data sentiment:
                     eng_sum = df_social_section.assign(_v=_vals_eng).groupby("__chan_norm")["_v"].sum().to_dict()
                 
                 prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada perbandingan performa channel social media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -874,9 +830,7 @@ Engagement per channel: {eng_sum}
                     pr_sum = df_main_section.assign(_v=_vals_pr).groupby("__chan_norm")["_v"].sum().to_dict()
                 
                 prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada distribusi coverage mainstream media. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -918,9 +872,7 @@ PR Value per channel: {pr_sum}
                     
                     media_type = "social media" if is_social else "mainstream media"
                     prompt = f"""
-{lang_instruction}
-
-Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata.
+Anda adalah analis insight senior. Tulis satu paragraf maksimum {max_words} kata, Bahasa Indonesia santai namun profesional.
 Fokus pada topik dengan sentiment {sentiment_type} di {media_type}. Hindari titik dua, titik koma, dash, dan simbol aneh.
 
 Tugas:
@@ -934,214 +886,6 @@ Top topics by metric: {top_topics_metric}
 """.strip()
                 else:
                     prompt = f"Data topic atau sentiment tidak tersedia untuk {sentiment_type}."
-            
-            elif key == "narr_insights":
-                # ==== Insights Summary ====
-                # Gather key metrics
-                tot_post_social = len(df_social_metrics)
-                tot_eng_social = int(coerce_numeric(df_social_metrics[eng_name]).sum()) if eng_name and eng_name in df_social_metrics.columns else 0
-                tot_art_main = len(df_main_metrics)
-                tot_pr_main = int(coerce_numeric(df_main_metrics[pr_col]).sum()) if pr_col and pr_col in df_main_metrics.columns else 0
-
-                # Top campaigns by post
-                grp_post = df_work.groupby(campaign_col).size().sort_values(ascending=False).head(3)
-                top_campaigns = grp_post.to_dict()
-
-                # Sentiment distribution
-                sent_col_global = pick_col(df, ["Sentiment","New Sentiment","new_sentiment","Sentiment Fix"])
-                if sent_col_global and sent_col_global in df_work.columns:
-                    df_sent = df_work.copy()
-                    df_sent["__sent"] = df_sent[sent_col_global].map(normalize_sentiment)
-                    sent_dist = df_sent["__sent"].value_counts().to_dict()
-                else:
-                    sent_dist = {}
-
-                # Contoh konten per top campaign biar narasi lebih nyambung ke isi
-                content_examples = []
-                for camp_name in top_campaigns.keys():
-                    sub = df_work[df_work[campaign_col].astype(str) == str(camp_name)].copy()
-                    ex_list = []
-                    for _, r in sub.head(8).iterrows():
-                        txt = _content_or_title(r, content_col, title_col, max_words=25)
-                        if txt:
-                            ex_list.append(txt)
-                        if len(ex_list) >= 4:
-                            break
-                    content_examples.append({"campaign": str(camp_name), "examples": ex_list})
-
-                data_ctx = {
-                    "total_social_post": tot_post_social,
-                    "total_social_engagement": tot_eng_social,
-                    "total_mainstream_articles": tot_art_main,
-                    "total_pr_value": tot_pr_main,
-                    "top_campaigns": top_campaigns,
-                    "sentiment_distribution": sent_dist,
-                    "content_examples": content_examples,
-                }
-
-                if narrative_lang == "ID":
-                    prompt = f"""
-            Anda adalah senior data analyst untuk brand FMCG. Tulis insight summary maksimum {max_words} kata.
-
-            Gunakan struktur berikut dalam format paragraf dengan heading yang jelas:
-
-            1. OVERVIEW
-            - Gambarkan secara ringkas performa campaign di social dan mainstream (volume, engagement, PR value).
-
-            2. KEY FINDINGS
-            - Sebutkan 3–4 temuan paling penting, misalnya:
-                * Kampanye mana yang paling dominan dan apa pola isi kontennya.
-                * Seperti apa efisiensi engagement per post.
-                * Pola tema konten berdasarkan contoh di data (jangan hanya ulangi angka).
-
-            3. SENTIMENT ANALYSIS
-            - Jelaskan distribusi sentiment dan artinya bagi brand (apakah aman, perlu waspada, atau butuh perbaikan).
-
-            4. COMPARISON
-            - Bandingkan peran social vs mainstream: social sebagai mesin volume dan engagement, mainstream sebagai penguat kredibilitas.
-            - Tutup dengan satu kalimat tentang implikasi strategis kombinasi keduanya.
-
-            Gunakan bahasa Indonesia yang natural, jelas, dan mudah dipahami. Jangan pakai bullet yang terlalu teknis, cukup heading dan kalimat pendek. Hindari simbol aneh.
-
-            Data ringkas (jangan ditiru mentah, gunakan hanya sebagai referensi analisis):
-
-            {json.dumps(data_ctx, ensure_ascii=False, indent=2)}
-            """.strip()
-                else:
-                    # English version
-                    prompt = f"""
-            You are a senior data analyst for an FMCG brand. Write an insight summary in clear professional English, maximum {max_words} words.
-
-            Use the following structure with clear headings:
-
-            1. OVERVIEW
-            - Briefly describe the overall campaign performance across social and mainstream (volume, engagement, PR value).
-
-            2. KEY FINDINGS
-            - Highlight 3–4 key findings, such as:
-                * Which campaigns dominate and what content patterns they use.
-                * How efficient engagement per post looks.
-                * The main themes of content based on the examples in the data (do not just repeat numbers).
-
-            3. SENTIMENT ANALYSIS
-            - Explain the sentiment distribution and what it implies for the brand (safe, needs attention, or requires corrective action).
-
-            4. COMPARISON
-            - Compare the roles of social vs mainstream: social as the volume and engagement engine, mainstream as credibility builder.
-            - Close with one sentence on the strategic implication of combining both.
-
-            Write in paragraphs with headings, no bullet list syntax. Use the data only as analytical context, not as a dump.
-
-            Data summary (for your reference only):
-
-            {json.dumps(data_ctx, ensure_ascii=False, indent=2)}
-            """.strip()
-
-            
-            elif key == "narr_recommendations":
-                # ==== Strategic Recommendations ====
-                current_date = datetime.now().strftime("%B %Y")
-
-                # Top & bottom campaigns berdasar volume
-                grp_post_all = df_work.groupby(campaign_col).size().sort_values(ascending=False)
-                top_campaign_name = grp_post_all.index[0] if len(grp_post_all) > 0 else "N/A"
-                bottom_campaign_name = grp_post_all.index[-1] if len(grp_post_all) > 1 else "N/A"
-
-                # Channel distribution
-                channel_dist = df_work_norm["__chan_norm"].value_counts().to_dict()
-
-                # Negative sentiment count
-                sent_col_global = pick_col(df, ["Sentiment","New Sentiment","new_sentiment","Sentiment Fix"])
-                negative_count = 0
-                if sent_col_global and sent_col_global in df_work.columns:
-                    df_sent = df_work.copy()
-                    df_sent["__sent"] = df_sent[sent_col_global].map(normalize_sentiment)
-                    negative_count = int((df_sent["__sent"] == "Negative").sum())
-
-                # Contoh konten dari top & bottom campaign untuk arah rekomendasi
-                def _sample_contents_for_campaign(cname, max_rows=10, max_examples=5):
-                    sub = df_work[df_work[campaign_col].astype(str) == str(cname)].copy()
-                    examples = []
-                    for _, r in sub.head(max_rows).iterrows():
-                        txt = _content_or_title(r, content_col, title_col, max_words=25)
-                        if txt:
-                            examples.append(txt)
-                        if len(examples) >= max_examples:
-                            break
-                    return examples
-
-                top_camp_examples = _sample_contents_for_campaign(top_campaign_name)
-                bottom_camp_examples = _sample_contents_for_campaign(bottom_campaign_name)
-
-                recomm_ctx = {
-                    "current_period": current_date,
-                    "top_campaign": top_campaign_name,
-                    "needs_improvement_campaign": bottom_campaign_name,
-                    "channel_distribution": channel_dist,
-                    "negative_sentiment_count": negative_count,
-                    "top_campaign_examples": top_camp_examples,
-                    "bottom_campaign_examples": bottom_camp_examples,
-                }
-
-                if narrative_lang == "ID":
-                    prompt = f"""
-            Anda adalah strategic communications consultant untuk brand FMCG. Tulis rekomendasi strategis maksimum {max_words} kata.
-
-            Gunakan struktur berikut, dalam bentuk paragraf dengan sub-judul yang jelas:
-
-            1. CONTENT STRATEGY
-            - Rekomendasikan 3–4 arah konten utama untuk campaign ini.
-            - Kaitkan dengan pola konten yang muncul pada top campaign dan kebutuhan untuk mengangkat campaign yang lebih lemah.
-            - Sentuh juga jenis konten yang paling cocok berdasarkan contoh isi (storytelling keluarga, edukasi nutrisi, promo, dsb).
-
-            2. CHANNEL OPTIMIZATION
-            - Jelaskan kanal mana yang perlu diprioritaskan, dipertahankan, atau dioptimalkan ulang berdasarkan distribusi channel.
-            - Bedakan peran kanal awareness vs kanal yang paling dekat dengan konversi.
-
-            3. SENTIMENT MANAGEMENT
-            - Beri saran bagaimana mengelola dan menurunkan sentimen negatif.
-            - Sertakan ide quick wins yang realistis untuk memperkuat konten positif dan meng-address keluhan utama.
-
-            4. CAMPAIGN FOCUS & BUSINESS IMPACT
-            - Jelaskan fokus campaign ke depan: apa yang harus diperkuat di top campaign dan apa yang perlu diperbaiki di campaign yang lemah.
-            - Kaitkan dengan tujuan bisnis: konversi, repeat purchase, dan penguatan brand trust.
-
-            Gunakan bahasa Indonesia yang to the point, actionable, dan mudah dipresentasikan ke klien. Jangan membuat bullet list teknis, cukup paragraf terpisah per sub-judul.
-
-            Konteks data (untuk referensi analisis, jangan ditulis apa adanya):
-
-            {json.dumps(recomm_ctx, ensure_ascii=False, indent=2)}
-            """.strip()
-                else:
-                    prompt = f"""
-            You are a strategic communications consultant for an FMCG brand. Write strategic recommendations in clear professional English, maximum {max_words} words.
-
-            Follow this structure, in paragraphs with clear sub-headings:
-
-            1. CONTENT STRATEGY
-            - Recommend 3–4 key content directions for this campaign.
-            - Link them to what is working in the top-performing campaign and what is missing in the weaker one.
-            - Reflect the dominant content patterns in the examples (family stories, nutrition education, promotions, etc.).
-
-            2. CHANNEL OPTIMIZATION
-            - Suggest which channels should be prioritized, maintained, or rebalanced based on the channel distribution.
-            - Differentiate between awareness channels and channels that are closer to conversion.
-
-            3. SENTIMENT MANAGEMENT
-            - Provide ideas to handle and reduce negative sentiment.
-            - Include realistic quick wins to amplify positive narratives and address the main complaints.
-
-            4. CAMPAIGN FOCUS & BUSINESS IMPACT
-            - Explain where to focus the next wave of campaigns: how to strengthen the top campaign and repair the weaker one.
-            - Tie the recommendations back to business goals such as conversion, repeat purchase, and brand trust.
-
-            Write in paragraphs with sub-headings, no bullet list syntax. Make it easy to present directly to a client.
-
-            Data context (for your reference only, do not copy verbatim):
-
-            {json.dumps(recomm_ctx, ensure_ascii=False, indent=2)}
-            """.strip()
-
             
             # Generate narrative
             narrative = generate_single_narrative(client, prompt, max_words=max_words)
@@ -1175,8 +919,7 @@ if st.sidebar.button("🗑️ Clear All Narratives", use_container_width=True):
               "narr_sent_social", "narr_sent_main",
               "narr_channel_social", "narr_channel_main",
               "narr_topic_soc_pos", "narr_topic_soc_neu", "narr_topic_soc_neg",
-              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg",
-              "narr_insights", "narr_recommendations"]:
+              "narr_topic_main_pos", "narr_topic_main_neu", "narr_topic_main_neg"]:
         st.session_state[k] = ""
     st.sidebar.success("All narratives cleared!")
     st.rerun()
@@ -1438,37 +1181,11 @@ c_sb1, c_sb2 = st.columns(2)
 
 with c_sb1:
     st.markdown("<div style='font-weight:600; font-size:16px; margin:4px 0 6px;'>Data Social</div>", unsafe_allow_html=True)
-    counts_social = sentiment_bar(df_social_metrics, "Social Media")
-    
-    # Sentiment Table for Social
-    if counts_social is not None:
-        st.caption("Distribusi Sentiment")
-        sent_table_social = pd.DataFrame({
-            "Sentimen": ["Positif", "Neutral", "Negatif"],
-            "Jumlah Post": [
-                int(counts_social.get("Positive", 0)),
-                int(counts_social.get("Neutral", 0)),
-                int(counts_social.get("Negative", 0))
-            ]
-        })
-        st.dataframe(sent_table_social, use_container_width=True, hide_index=True)
+    sentiment_bar(df_social_metrics, "Social Media")
 
 with c_sb2:
     st.markdown("<div style='font-weight:600; font-size:16px; margin:4px 0 6px;'>Data Mainstream</div>", unsafe_allow_html=True)
-    counts_main = sentiment_bar(df_main_metrics, "Mainstream Media")
-    
-    # Sentiment Table for Mainstream
-    if counts_main is not None:
-        st.caption("Distribusi Sentiment")
-        sent_table_main = pd.DataFrame({
-            "Sentimen": ["Positif", "Neutral", "Negatif"],
-            "Jumlah Artikel": [
-                int(counts_main.get("Positive", 0)),
-                int(counts_main.get("Neutral", 0)),
-                int(counts_main.get("Negative", 0))
-            ]
-        })
-        st.dataframe(sent_table_main, use_container_width=True, hide_index=True)
+    sentiment_bar(df_main_metrics, "Mainstream Media")
 
 # AI Narratives for Sentiment (below both charts)
 if st.session_state["narr_sent_social"] or st.session_state["narr_sent_main"]:
@@ -1546,33 +1263,6 @@ with pie_r:
         st.plotly_chart(_pie_channels(eng_sum, "SOV by Engagement (Channel)"), use_container_width=True)
     else:
         st.info("Kolom Engagement tidak ditemukan untuk pie.")
-
-# Channel Table for Social
-st.caption("Distribusi Channel Social Media")
-channel_colors = {
-    "Instagram": "🟣",
-    "Tiktok": "⚫",
-    "Twitter": "🔵",
-    "Facebook": "🔵",
-    "YouTube": "🔴",
-    "Forum": "🟢"
-}
-
-channel_table_data = []
-for ch in channels_for_chart:
-    post_val = int(post_counts[post_counts["Channel"] == ch]["Value"].iloc[0]) if len(post_counts[post_counts["Channel"] == ch]) > 0 else 0
-    eng_val = 0
-    if not eng_sum.empty and len(eng_sum[eng_sum["Channel"] == ch]) > 0:
-        eng_val = int(eng_sum[eng_sum["Channel"] == ch]["Value"].iloc[0])
-    
-    channel_table_data.append({
-        "Channel": f"{channel_colors.get(ch, '•')} {ch}",
-        "Volume Post": post_val,
-        "Engagement": eng_val
-    })
-
-channel_table_social = pd.DataFrame(channel_table_data)
-st.dataframe(channel_table_social, use_container_width=True, hide_index=True)
 
 c41, c42 = st.columns(2)
 with c41:
@@ -1663,30 +1353,6 @@ with pie_r:
     else:
         st.info("Nilai PR/Buzz tidak ditemukan untuk pie.")
 
-# Channel Table for Mainstream
-st.caption("Distribusi Channel Mainstream Media")
-channel_colors_main = {
-    "Online Media": "🔵",
-    "Printed": "📰",
-    "TV": "📺"
-}
-
-channel_table_data_main = []
-for ch in channels_for_main:
-    art_val = int(art_counts[art_counts["Channel"] == ch]["Value"].iloc[0]) if len(art_counts[art_counts["Channel"] == ch]) > 0 else 0
-    pr_val = 0
-    if not val_sum_main.empty and len(val_sum_main[val_sum_main["Channel"] == ch]) > 0:
-        pr_val = int(val_sum_main[val_sum_main["Channel"] == ch]["Value"].iloc[0])
-    
-    channel_table_data_main.append({
-        "Channel": f"{channel_colors_main.get(ch, '•')} {ch}",
-        "Artikel": art_val,
-        "PR Value": pr_val
-    })
-
-channel_table_main = pd.DataFrame(channel_table_data_main)
-st.dataframe(channel_table_main, use_container_width=True, hide_index=True)
-
 d51, d52 = st.columns(2)
 with d51:
     left_choice5  = st.selectbox("Left Axis (Bar)", left_choices5, index=0, key="ch5_left")
@@ -1711,64 +1377,6 @@ st.plotly_chart(fig_main_combo, use_container_width=True)
 if st.session_state["narr_channel_main"]:
     st.caption("🤖 AI Narrative - Mainstream Channels")
     st.markdown(st.session_state["narr_channel_main"])
-
-# ============== TOP 10 MEDIA (MAINSTREAM) ==============
-st.markdown("---")
-st.subheader("Top 10 Media (Mainstream)")
-
-if media_col and media_col in df_main_metrics.columns:
-    media_counts = df_main_metrics.groupby(media_col).size().sort_values(ascending=False)
-    top10_media = media_counts.head(10)
-    
-    if not top10_media.empty:
-        # Chart
-        fig_media = go.Figure()
-        fig_media.add_bar(
-            y=top10_media.index,
-            x=top10_media.values,
-            orientation='h',
-            marker_color='#1f77b4',
-            text=top10_media.values,
-            texttemplate='%{text}',
-            textposition='outside'
-        )
-        fig_media.update_layout(
-            title="Top 10 Media by Article Count",
-            height=400,
-            yaxis=dict(autorange="reversed"),
-            xaxis=dict(title="Jumlah Artikel"),
-            margin=dict(l=10, r=10, t=40, b=10)
-        )
-        st.plotly_chart(fig_media, use_container_width=True)
-        
-        # Table with topics
-        st.caption("Detail Media")
-        
-        table_data = []
-        for media in top10_media.index:
-            count = int(top10_media[media])
-            
-            media_df = df_main_metrics[df_main_metrics[media_col] == media]
-            
-            # Get top 3 topics for this media
-            if topic_col and topic_col in media_df.columns:
-                top_topics = media_df[topic_col].value_counts().head(3).index.tolist()
-                topics_str = ", ".join([str(t) for t in top_topics])
-            else:
-                topics_str = "-"
-            
-            table_data.append({
-                "MEDIA": media,
-                "JUMLAH": count,
-                "TOPIC": topics_str
-            })
-        
-        table_df = pd.DataFrame(table_data)
-        st.dataframe(table_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("Tidak ada data media untuk ditampilkan.")
-else:
-    st.info("Kolom Media tidak ditemukan untuk mainstream data.")
 
 # ============== Topic Charts ==============
 st.markdown("---")
@@ -1850,20 +1458,5 @@ else:
 
     df_topic_main = tmp_topics[tmp_topics["__chan_norm"].isin(selected_mainstream_channels)]
     _render_topic_grid(df_topic_main, "Mainstream", top_n=topic_topn)
-
-# ============== INSIGHTS & RECOMMENDATIONS ==============
-st.markdown("---")
-st.subheader("📊 Insights")
-if st.session_state["narr_insights"]:
-    st.markdown(st.session_state["narr_insights"])
-else:
-    st.info("_Generate insights using the button in the sidebar._")
-
-st.markdown("---")
-st.subheader("💡 Recommendations")
-if st.session_state["narr_recommendations"]:
-    st.markdown(st.session_state["narr_recommendations"])
-else:
-    st.info("_Generate recommendations using the button in the sidebar._")
 
 logger.info("Application rendering completed")
