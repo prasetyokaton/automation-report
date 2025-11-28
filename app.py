@@ -210,7 +210,7 @@ def normalize_channel(val: str):
     if s in {"facebook","fb"}: return "Facebook"
     if s in {"forum","kaskus","reddit"}: return "Forum"
     if s in {"online media","online","portal","news","website"}: return "Online Media"
-    if s in {"printed","print","koran","majalah","newspaper","tabloid"}: return "Printed"
+    if s in {"printedmedia","printed","print","koran","majalah","newspaper","tabloid"}: return "Printed"
     if s in {"tv","television","televisi"}: return "TV"
     return str(val).strip().title()
 
@@ -1867,3 +1867,5 @@ else:
     st.info("_Generate recommendations using the button in the sidebar._")
 
 logger.info("Application rendering completed")
+
+#by katon
